@@ -47,7 +47,8 @@ void ARewindLearnedCharacter::BeginPlay()
 //////////////////////////////////////////////////////////////////////////// Input
 
 void ARewindLearnedCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{	
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
