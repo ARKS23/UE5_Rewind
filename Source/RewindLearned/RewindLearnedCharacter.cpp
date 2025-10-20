@@ -13,7 +13,6 @@
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
-//////////////////////////////////////////////////////////////////////////
 // ARewindLearnedCharacter
 
 ARewindLearnedCharacter::ARewindLearnedCharacter()
