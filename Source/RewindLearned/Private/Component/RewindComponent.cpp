@@ -152,7 +152,7 @@ bool URewindComponent::HandleInsufficientSnapshots()
 		return true;
 	}
 
-	// 此时快照数量 > 2,调试检查越界情况 TODO: 快进存在越界情况，正在找出错位置
+	// 此时快照数量 > 2,调试检查越界情况
 	check(LatestSnapshotIndex >= 0 && LatestSnapshotIndex < TransformAndVelocitySnapshots.Num());
 	return false;
 }
@@ -163,7 +163,7 @@ void URewindComponent::InterpolateAndApplySnapshots(bool bRewinding)
 	// 前置安全性检查
 	constexpr int MinSnapshotForInterpolation = 2; // 设置至少2个snapshot进行线性插值
 	check(TransformAndVelocitySnapshots.Num() >= MinSnapshotForInterpolation);
-	check(bRewinding && LatestSnapshotIndex < TransformAndVelocitySnapshots.Num() - 1 || bIsFastForwarding && LatestSnapshotIndex > 0);
+	check(bRewinding && LatestSnapshotIndex < TransformAndVelocitySnapshots.Num() - 1 || !bRewinding && LatestSnapshotIndex > 0); // 断言判断条件bug，已修复
 
 	// 确定插值源和目标
 	// LatestSnapshotIndex 始终是“目标”快照。
