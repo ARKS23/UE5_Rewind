@@ -22,7 +22,8 @@ class REWINDLEARNED_API ARewindCharacter : public ACharacter
 	/* 时间控制组件 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Rewind", meta = (AllowPrivateAccess = "true"))
 	URewindComponent *RewindComponent;
-
+	
+protected:
 	/* ---------------------------------- 输入相关 ---------------------------------- */
 	/* mapping context */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Input, meta = (AllowPrivateAccess = "true"))

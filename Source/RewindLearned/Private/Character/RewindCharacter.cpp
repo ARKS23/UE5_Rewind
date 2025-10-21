@@ -42,12 +42,14 @@ void ARewindCharacter::BeginPlay()
 void ARewindCharacter::ToggleTimeScrub(const FInputActionValue& Value)
 {
 	check(GameMode);
+	//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Blue, FString::Printf(TEXT("ToggleTimeScrubAction")));
 	if (GameMode) GameMode->ToggleTimeScrub();
 }
 
 void ARewindCharacter::Rewind(const FInputActionValue& Value)
 {
 	check(GameMode);
+	//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Blue, FString::Printf(TEXT("RewindAction")));
 	if (GameMode) GameMode->StartGlobalRewind();
 }
 

@@ -67,7 +67,11 @@ void URewindComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	// ...
+	// 按照状态变量进行对应的操作
+	if (bIsRewinding) PlaySnapshots(DeltaTime, true);
+	else if (bIsFastForwarding) PlaySnapshots(DeltaTime, false);
+	else if (bIsTimeScrubbing) PauseTime(DeltaTime, bLastTimeManipulationWasRewind);
+	else RecordSnapshot(DeltaTime);
 }
 
 void URewindComponent::SetIsRewindingEnabled(bool bEnabled)
@@ -95,6 +99,7 @@ void URewindComponent::OnGlobalRewindStarted()
 	if (TryStartTimeManipulation(bIsRewinding, !bIsTimeScrubbing))
 	{
 		OnRewindStarted.Broadcast();
+		//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Blue, FString::Printf(TEXT("URewindComponent::OnGlobalRewindStarted")));
 		if (!bAlreadyManipulatingTime) OnTimeManipulationStarted.Broadcast();
 	}
 }
@@ -134,7 +139,7 @@ bool URewindComponent::HandleInsufficientSnapshots()
 {
 	/* 该函数处理插值snapshot不够的情况(小于或等于1), 若不够则返回true */
 	// 防止数据错位：“物理快照”和“移动快照”两个缓冲区的数量必须“永远”保持一致。
-	check(!bSnapshotMovementVelocityAndMode || TransformAndVelocitySnapshots.Num() != MovementVelocityAndModeSnapshots.Num());
+	check(!bSnapshotMovementVelocityAndMode || TransformAndVelocitySnapshots.Num() == MovementVelocityAndModeSnapshots.Num());
 
 	// 零快照的情况
 	if (LatestSnapshotIndex < 0 || TransformAndVelocitySnapshots.Num() == 0) return true;
@@ -147,7 +152,7 @@ bool URewindComponent::HandleInsufficientSnapshots()
 		return true;
 	}
 
-	// 此时快照数量 > 2,调试检查越界情况
+	// 此时快照数量 > 2,调试检查越界情况 TODO: 快进存在越界情况，正在找出错位置
 	check(LatestSnapshotIndex >= 0 && LatestSnapshotIndex < TransformAndVelocitySnapshots.Num());
 	return false;
 }
@@ -163,8 +168,8 @@ void URewindComponent::InterpolateAndApplySnapshots(bool bRewinding)
 	// 确定插值源和目标
 	// LatestSnapshotIndex 始终是“目标”快照。
 	// PreviousIndex 是“源”快照。
-	// - 回溯时 (bRewinding=true)：我们从索引 5 移向 4。Latest=4, Previous=5 (4+1)。
-	// - 快进时 (bRewinding=false)：我们从索引 4 移向 5。Latest=5, Previous=4 (5-1)。
+	// - 回溯时 (bRewinding=true)：从索引 5 移向 4。Latest=4, Previous=5 (4+1)。
+	// - 快进时 (bRewinding=false)：从索引 4 移向 5。Latest=5, Previous=4 (5-1)。
 	const int PreviousIndex = bRewinding ? LatestSnapshotIndex + 1 : LatestSnapshotIndex - 1;
 
 	// 进行混合
@@ -324,13 +329,13 @@ void URewindComponent::RecordSnapshot(float DeltaTime)
 
 	// snapshot
 	FTransform Transform = GetOwner()->GetActorTransform();
-	FVector LinearVelocity = OwnerRootComponent->GetPhysicsLinearVelocity();
-	FVector AngularVelocityInRadians = OwnerRootComponent->GetPhysicsAngularVelocityInRadians();
-
+	FVector LinearVelocity = OwnerRootComponent ? OwnerRootComponent->GetPhysicsLinearVelocity() : FVector::Zero();
+	FVector AngularVelocityInRadians = OwnerRootComponent ? OwnerRootComponent->GetPhysicsAngularVelocityInRadians() : FVector::Zero();
+	
 	// 存储snapshot
 	LatestSnapshotIndex = TransformAndVelocitySnapshots.Emplace(TimeSinceSnapshotsChanged, Transform, LinearVelocity, AngularVelocityInRadians);
 
-	if (bSnapshotMovementVelocityAndMode) // 角色运动可选项的记录
+	if (bSnapshotMovementVelocityAndMode && OwnerMovementComponent) // 角色运动可选项的记录
 	{
 		if (MovementVelocityAndModeSnapshots.Num() == MaxSnapshots) MovementVelocityAndModeSnapshots.PopFront();
 		FVector MovementVelocity = OwnerMovementComponent->Velocity;
@@ -363,6 +368,7 @@ void URewindComponent::PlaySnapshots(float DeltaTime, bool bRewinding)
 {
 	/* 根据本帧的时间（DeltaTime）和全局速度，计算出角色应该在时间轴上移动到哪个新位置 */
 	TRACE_CPUPROFILER_EVENT_SCOPE(URewindComponent::PlaySnapshots);
+	//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Purple, TEXT("URewindComponent::PlaySnapshots"));
 
 	UnpauseAnimation();
 
@@ -383,7 +389,7 @@ void URewindComponent::PlaySnapshots(float DeltaTime, bool bRewinding)
 			--LatestSnapshotIndex;
 		}
 
-		if (LatestSnapshotIndex == TransformAndVelocitySnapshots.Num() - 1) // 只剩一个snapshot,直接适配
+		if (LatestSnapshotIndex == TransformAndVelocitySnapshots.Num() - 1) // 只剩一个snapshot,直接使用这个snapshot
 		{
 			ApplySnapshot(TransformAndVelocitySnapshots[LatestSnapshotIndex], false);
 			if (bSnapshotMovementVelocityAndMode)
@@ -402,7 +408,7 @@ void URewindComponent::PlaySnapshots(float DeltaTime, bool bRewinding)
 			LastSnapshotTime = TransformAndVelocitySnapshots[LatestSnapshotIndex].TimeSinceLastSnapshot;
 			++LatestSnapshotIndex;
 		}
-		bReachedEndOfTrack = LatestSnapshotIndex ==  TransformAndVelocitySnapshots.Num() - 1;
+		bReachedEndOfTrack = LatestSnapshotIndex == TransformAndVelocitySnapshots.Num() - 1;
 	}
 
 	// 到达左右端点的情况
@@ -424,7 +430,7 @@ void URewindComponent::PauseTime(float DeltaTime, bool bRewinding)
 
 	if (bRewinding) // 上一次操作的方向是rewind
 	{
-		if (LatestSnapshotIndex == TransformAndVelocitySnapshots.Num() - 1)
+		if (LatestSnapshotIndex == TransformAndVelocitySnapshots.Num() - 1) // 只剩一个snapshot,就使用唯一的这个
 		{
 			ApplySnapshot(TransformAndVelocitySnapshots[LatestSnapshotIndex], false);
 			if (bSnapshotMovementVelocityAndMode)

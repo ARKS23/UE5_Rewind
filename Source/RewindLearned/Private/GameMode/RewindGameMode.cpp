@@ -41,6 +41,7 @@ void ARewindGameMode::StartGlobalRewind()
 {
 	TRACE_BOOKMARK(TEXT("ARewindGameMode::StartGlobalRewind")); // 性能检测
 	bIsGlobalRewinding = true;
+	//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Blue, FString::Printf(TEXT("ARewindGameMode::StartGlobalRewind()")));
 	OnGlobalRewindStarted.Broadcast(); // 广播该事件，通知rewind component工作
 }
 
