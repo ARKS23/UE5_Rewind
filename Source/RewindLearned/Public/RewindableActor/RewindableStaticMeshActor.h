@@ -17,6 +17,7 @@ public:
 	// 回溯组件
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rewind")
 	URewindComponent* RewindComponent;
-	
+
+	// 构造函数中进行一些初始化操作
 	ARewindableStaticMeshActor();
 };

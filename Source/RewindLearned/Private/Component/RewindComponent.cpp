@@ -38,12 +38,12 @@ void URewindComponent::BeginPlay()
 	// 获取Owner相关的组件
 	OwnerRootComponent = Cast<UPrimitiveComponent>(GetOwner()->GetRootComponent());
 	const ACharacter* Character = Cast<ACharacter>(GetOwner());
-	if (bSnapshotMovementVelocityAndMode)
+	if (bSnapshotMovementVelocityAndMode) // 角色运动组件数据记录（可选）
 	{
 		OwnerMovementComponent = Character ? Cast<UCharacterMovementComponent>(Character->GetMovementComponent()) : nullptr;
 	}
 
-	if (bPauseAnimationDuringTimeScrubbing)
+	if (bPauseAnimationDuringTimeScrubbing) // 时间暂停时是否停止角色动画（可选）
 	{
 		OwnerSkeletalMesh = Character ? Character->GetMesh() : nullptr;
 	}
@@ -231,7 +231,7 @@ FMovementVelocityAndModeSnapshot URewindComponent::BlendSnapshots(const FMovemen
 
 void URewindComponent::ApplySnapshot(const FTransformAndVelocitySnapshot& Snapshot, bool bApplyPhysics)
 {
-	/* 回溯到对应的Transform和速度 */
+	/* 回溯到对应的Transform和速度, 第二个参数恢复物理效果的参数是结束时间操作时才传入true */
 	GetOwner()->SetActorTransform(Snapshot.Transform);
 	if (OwnerRootComponent && bApplyPhysics) // 回到正常世界时间流逝时调用该函数传入的bApplyPhysics为true
 	{
@@ -279,8 +279,8 @@ void URewindComponent::InitializeRingBuffers(float MaxRewindSeconds)
 	MaxSnapshots = FMath::CeilToInt32(MaxRewindSeconds / SnapshotFrequencySeconds);
 
 	// 根据确定的最大数量来分配对应的内存空间
-	constexpr int OneMB = 1024 * 1024;
-	constexpr int ThreeMB = OneMB * 3;
+	constexpr int OneMB = 1024 * 1024; // 非角色snapshot数据存储最多1MB
+	constexpr int ThreeMB = OneMB * 3; // 含角色运动状态数据记录的存储最多3MB
 
 	if (!bSnapshotMovementVelocityAndMode) //非包含角色运动模式回溯
 	{
@@ -317,7 +317,7 @@ void URewindComponent::InitializeRingBuffers(float MaxRewindSeconds)
 
 void URewindComponent::RecordSnapshot(float DeltaTime)
 {
-	/* 记录snapshot的函数，每帧会检测情况调用 */
+	/* 记录snapshot的函数，时间正常流逝时每帧调用 */
 	TRACE_CPUPROFILER_EVENT_SCOPE(URewindComponent::RecordSnapshot);
 	TimeSinceSnapshotsChanged += DeltaTime;
 
@@ -331,7 +331,6 @@ void URewindComponent::RecordSnapshot(float DeltaTime)
 	FTransform Transform = GetOwner()->GetActorTransform();
 	FVector LinearVelocity = OwnerRootComponent ? OwnerRootComponent->GetPhysicsLinearVelocity() : FVector::Zero();
 	FVector AngularVelocityInRadians = OwnerRootComponent ? OwnerRootComponent->GetPhysicsAngularVelocityInRadians() : FVector::Zero();
-	
 	// 存储snapshot
 	LatestSnapshotIndex = TransformAndVelocitySnapshots.Emplace(TimeSinceSnapshotsChanged, Transform, LinearVelocity, AngularVelocityInRadians);
 
@@ -366,7 +365,10 @@ void URewindComponent::EraseFutureSnapshots()
 
 void URewindComponent::PlaySnapshots(float DeltaTime, bool bRewinding)
 {
-	/* 根据本帧的时间（DeltaTime）和全局速度，计算出角色应该在时间轴上移动到哪个新位置 */
+	/*
+	 * Rewind和FastForward时调用该函数
+	 * 根据本帧的时间（DeltaTime）和全局速度，计算出角色应该在时间轴上移动到哪个新位置
+	 */
 	TRACE_CPUPROFILER_EVENT_SCOPE(URewindComponent::PlaySnapshots);
 	//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Purple, TEXT("URewindComponent::PlaySnapshots"));
 
@@ -375,7 +377,7 @@ void URewindComponent::PlaySnapshots(float DeltaTime, bool bRewinding)
 	if (HandleInsufficientSnapshots()) { return; }
 
 	DeltaTime *= GameMode->GetGlobalRewindSpeed(); // 匹配设置的速度
-	TimeSinceSnapshotsChanged += DeltaTime;
+	TimeSinceSnapshotsChanged += DeltaTime; // 累加上对应速度的时间差
 
 	bool bReachedEndOfTrack = false;
 	float LastSnapshotTime = TransformAndVelocitySnapshots[LatestSnapshotIndex].TimeSinceLastSnapshot;
@@ -443,17 +445,17 @@ void URewindComponent::PauseTime(float DeltaTime, bool bRewinding)
 	}
 
 	float LastedSnapshotTime = TransformAndVelocitySnapshots[LatestSnapshotIndex].TimeSinceLastSnapshot;
-	// 检查插值进度 (TimeSinceSnapshotsChanged) 是否还未完成
+	// 检查插值进度 (TimeSinceSnapshotsChanged) 是否还未完成, 这一步更新【TimeSinceSnapshotsChanged】
 	if (TimeSinceSnapshotsChanged < LastedSnapshotTime)
 	{
 		DeltaTime *= GameMode->GetGlobalRewindSpeed(); // 获取本帧的时间，并乘以“回溯速度”。
 		TimeSinceSnapshotsChanged = FMath::Min(TimeSinceSnapshotsChanged + DeltaTime, LastedSnapshotTime); //推进进度，并使用 FMath::Min 确保进度“不会超过”总时长。
 	}
 
-	
+	// 进行线性插值
 	InterpolateAndApplySnapshots(bRewinding);
 
-	// 检查插值进度是否“已经”到达 (或非常接近) 总时长
+	// 检查插值进度是否“已经”到达 (或非常接近) 总时长，而且目前还是暂停状态，所以停在这一snapshot，暂停动画
 	if (FMath::IsNearlyEqual(TimeSinceSnapshotsChanged, LastedSnapshotTime))
 	{
 		// / 只有当插值 100% 完成时，才调用 PauseAnimation() 来冻结动画。
@@ -489,9 +491,8 @@ bool URewindComponent::TryStopTimeManipulation(bool& bStateToSet, bool bResetTim
 	if (!bStateToSet) return false;
 	bStateToSet = false;
 
-	if (!bIsTimeScrubbing)
+	if (!bIsTimeScrubbing) /* 没有时停，需要回复到正常游戏模式状态的代码逻辑 */
 	{
-		/* 没有时停，需要回复到正常游戏模式状态的代码逻辑 */
 		if (bResetTimeSinceSnapshotsChanged) TimeSinceSnapshotsChanged = 0.0f;
 
 		// 恢复物理模拟和动画播放
@@ -550,6 +551,6 @@ void URewindComponent::UnpauseAnimation()
 
 	check(OwnerSkeletalMesh);
 	bPausedAnimation = false;
-	OwnerSkeletalMesh->bPauseAnims = false;
+	OwnerSkeletalMesh->bPauseAnims = false; // 骨骼网格体恢复动画
 }
 

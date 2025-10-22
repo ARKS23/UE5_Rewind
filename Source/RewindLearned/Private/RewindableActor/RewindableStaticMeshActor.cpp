@@ -9,6 +9,7 @@
 ARewindableStaticMeshActor::ARewindableStaticMeshActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	// 网格体物理设置
 	GetStaticMeshComponent()->Mobility = EComponentMobility::Movable;
 	GetStaticMeshComponent()->SetSimulatePhysics(true);
 
