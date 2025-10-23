@@ -26,7 +26,7 @@ void ARewindCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 配置mapping context
+	// 配置mapping context的过程：先拿到PlayerController->再通过PlayerController的LocalPlayer来获得EnhancedInputLocalPlayerSubsystem->subsystem配置mapping context
 	if (APlayerController *PlayerController = Cast<APlayerController>(Controller))
 	{
 		if (UEnhancedInputLocalPlayerSubsystem *Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
@@ -119,7 +119,7 @@ void ARewindCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// 绑定时间控制相关操作
+	// 绑定时间控制相关操作: 用playerInputComponent获得EnhancedInputComponent,然后用该Component进行绑定操作
 	if (UEnhancedInputComponent *EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
 		// 时间暂停开关

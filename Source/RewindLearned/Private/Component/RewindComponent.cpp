@@ -76,6 +76,7 @@ void URewindComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 
 void URewindComponent::SetIsRewindingEnabled(bool bEnabled)
 {
+	/* 该函数可关闭组件时间操作功能，当角色不参加时间操作的时候会调用该函数关闭时间操作功能 */
 	bIsRewindingEnabled = bEnabled;
 	if (!bIsRewindingEnabled) // 关闭回溯功能后，则对所有正在进行的时间操作进行终止
 	{
@@ -96,7 +97,7 @@ void URewindComponent::SetIsRewindingEnabled(bool bEnabled)
 void URewindComponent::OnGlobalRewindStarted()
 {
 	const bool bAlreadyManipulatingTime = IsTimeBeingManipulated();
-	if (TryStartTimeManipulation(bIsRewinding, !bIsTimeScrubbing))
+	if (TryStartTimeManipulation(bIsRewinding, !bIsTimeScrubbing)) // 第二个参数是重置时间差，时间暂停状态才重置时间
 	{
 		OnRewindStarted.Broadcast();
 		//GEngine->AddOnScreenDebugMessage(-1, 10, FColor::Blue, FString::Printf(TEXT("URewindComponent::OnGlobalRewindStarted")));
@@ -107,7 +108,7 @@ void URewindComponent::OnGlobalRewindStarted()
 void URewindComponent::OnGlobalFastForwardStarted()
 {
 	const bool bAlreadyManipulatingTime = IsTimeBeingManipulated();
-	if (bIsTimeScrubbing && TryStartTimeManipulation(bIsFastForwarding, !bIsTimeScrubbing))
+	if (bIsTimeScrubbing && TryStartTimeManipulation(bIsFastForwarding, !bIsTimeScrubbing)) // 时间快进功能需要暂停状态的时候才能使用
 	{
 		OnFastForwardStarted.Broadcast();
 		if (!bAlreadyManipulatingTime) OnTimeManipulationStarted.Broadcast();
